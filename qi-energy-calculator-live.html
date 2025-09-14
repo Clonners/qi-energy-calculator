@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>QI Energy Calculator (Quai Network)</title>
+  <meta name="description" content="Estimate power, energy (kWh) and cost to produce 1 QI based on your hashrate, wattage, and electricity price. Includes GPU presets, live fetch from hashrate.no, and a rig builder." />
+  <style>
+    /* ---------- THEME TOKENS ---------- */
+    :root{
+      --bg:#0f1115; --card:#161a22; --muted:#8a94a7; --text:#e7ecf3; --accent:#7aa2ff; --line:#222837; --input:#0e121a;
+      --link:#9fbcff; --badge-bg:#10203d; --badge-br:#2b3c63; --badge-tx:#cfe1ff;
+      /* Buttons */
+      --btn-bg:#101623; --btn-br:#2b3650; --btn-tx:var(--text);
+      --btnp-bg:linear-gradient(180deg,#1b2a4a,#15213a); --btnp-br:#314066; --btnp-tx:var(--text);
+      --table-head:#1c2230; --table-row:#121722;
+    }
+    [data-theme="light"]{
+      --bg:#f6f8fc; --card:#ffffff; --muted:#5b6577; --text:#0b1020; --accent:#274bdb; --line:#e5e9f2; --input:#ffffff;
+      --link:#274bdb; --badge-bg:#eef2ff; --badge-br:#d6defa; --badge-tx:#1a2b6b;
+      /* Light button palettes (fix primary button) */
+      --btn-bg:#f3f5fb; --btn-br:#dfe5f2; --btn-tx:#0b1020;
+      --btnp-bg:linear-gradient(180deg,#ffffff,#eef2ff); --btnp-br:#cdd7f2; --btnp-tx:#0b1020;
+      --table-head:#eef2ff; --table-row:#ffffff;
+    }
+
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Arial, sans-serif;
+      background:var(--bg); color:var(--text);
+    }
+    header{padding:20px 16px; border-bottom:1px solid var(--line)}
+    .wrap{max-width:1160px; margin:0 auto; padding:0 12px}
+    .top{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap}
+    .brand{display:flex; align-items:center; gap:12px}
+    .brand img{width:40px; height:40px; border-radius:8px; object-fit:cover}
+    h1{font-size:1.25rem; margin:0}
+    .badge{display:inline-block; background:var(--badge-bg); border:1px solid var(--badge-br); color:var(--badge-tx);
+      padding:6px 10px; border-radius:999px; font-size:.85rem}
+    .muted{color:var(--muted)}
+    main{padding:16px 0}
+    .grid{display:grid; gap:16px}
+    @media(min-width:980px){ .grid-2{grid-template-columns:1.2fr .8fr} .grid-3{grid-template-columns:repeat(3,1fr)} }
+    .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px}
+    label{display:block; font-size:.9rem; color:var(--muted); margin:0 0 6px 2px}
+    input, select{
+      width:100%; padding:12px 12px; border-radius:10px; border:1px solid var(--line); background:var(--input); color:var(--text);
+    }
+    input:focus, select:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(122,162,255,.15)}
+    .row{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+    button{
+      padding:12px 14px; border-radius:10px; border:1px solid var(--btn-br); background:var(--btn-bg); color:var(--btn-tx); cursor:pointer;
+    }
+    .primary{background:var(--btnp-bg); border-color:var(--btnp-br); color:var(--btnp-tx)}
+    a{color:var(--link); text-decoration:none}
+    a:hover{text-decoration:underline}
+    .out{font-size:1.05rem; line-height:1.5}
+    .small{font-size:.9rem}
+    .hint{font-size:.85rem; color:var(--muted); margin-top:6px}
+    hr{border:0; border-top:1px solid var(--line); margin:12px 0}
+    footer{padding:20px 16px; border-top:1px solid var(--line); color:var(--muted); text-align:center}
+    .right{display:flex; align-items:center; gap:10px}
+    .switch{display:inline-flex; align-items:center; gap:8px}
+
+    /* Rig table */
+    table{width:100%; border-collapse:separate; border-spacing:0; border:1px solid var(--line); border-radius:12px; overflow:hidden}
+    thead{background:var(--table-head)}
+    th, td{padding:10px 12px; text-align:left; border-bottom:1px solid var(--line); font-size:.95rem}
+    tbody tr:nth-child(odd){background:var(--table-row)}
+    tbody tr:last-child td{border-bottom:0}
+    tfoot td{font-weight:600}
+    .num{text-align:right}
+    .actions button{padding:6px 10px; font-size:.85rem}
+    .pill{display:inline-block; padding:4px 8px; border-radius:999px; border:1px solid var(--line); background:var(--input); font-size:.8rem}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap top">
+      <div class="brand">
+        <img id="logo" alt="quai network logo" src="quai-logo.png">
+        <div>
+          <h1>QI Energy Calculator</h1>
+          <div class="muted">Estimate energy & cost to mint <strong>1 QI</strong> on your setup</div>
+        </div>
+      </div>
+      <div class="right">
+        <div class="switch">
+          <label for="theme">Theme</label>
+          <select id="theme" title="Theme">
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+        </div>
+        <span class="badge" id="relation-badge">Default: 100&nbsp;MH/s·day =&nbsp;1&nbsp;QI</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap grid grid-2">
+    <!-- LEFT: Inputs -->
+    <section class="card">
+      <h2 style="margin-top:0;font-size:1.05rem">Inputs</h2>
+
+      <div class="grid grid-3">
+        <div>
+          <label for="hashrate">Hashrate (MH/s)</label>
+          <input id="hashrate" type="number" min="0" step="0.01" value="60">
+          <div class="hint">Sum across all GPUs/rigs you’ll be using.</div>
+        </div>
+        <div>
+          <label for="power">Power draw (W)</label>
+          <input id="power" type="number" min="0" step="1" value="120">
+          <div class="hint">Wall power when mining (use your watt-meter if possible).</div>
+        </div>
+        <div>
+          <label for="price">Electricity price (<span id="cur-symbol">$</span>/kWh)</label>
+          <input id="price" type="number" min="0" step="0.0001" value="0.15">
+          <div class="hint">We don’t fetch FX; enter your local kWh price.</div>
+        </div>
+      </div>
+
+      <div class="grid grid-3" style="margin-top:10px">
+        <div>
+          <label for="currency">Currency</label>
+          <select id="currency">
+            <option value="USD">$ (USD)</option>
+            <option value="EUR">€ (EUR)</option>
+            <option value="ARS">$ (ARS)</option>
+            <option value="CLP">$ (CLP)</option>
+            <option value="BRL">R$ (BRL)</option>
+            <option value="MXN">$ (MXN)</option>
+            <option value="GBP">£ (GBP)</option>
+          </select>
+        </div>
+        <div>
+          <label for="conv">Conversion factor (MH/s·day per QI)</label>
+          <input id="conv" type="number" min="0.01" step="0.01" value="100">
+          <div class="hint">If the network changes, update this (default 100).</div>
+        </div>
+        <div>
+          <label for="target">Target QI/day (optional)</label>
+          <input id="target" type="number" min="0.0001" step="0.0001" placeholder="1.0">
+          <div class="hint">We’ll show required hashrate & watts for that target.</div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:14px">
+        <button class="primary" id="calc">Calculate</button>
+        <button id="reset">Reset</button>
+        <button id="save">Save defaults</button>
+      </div>
+    </section>
+
+    <!-- RIGHT: Presets, Live Fetch & Rig -->
+    <section class="card">
+      <h2 style="margin-top:0;font-size:1.05rem">GPU presets & live data (QUAI / ProgPowQuai)</h2>
+      <div class="grid grid-3">
+        <div>
+          <label for="preset">Preset (static)</label>
+          <select id="preset">
+            <option value="custom">Custom</option>
+            <!-- NVIDIA 20/30/40 -->
+            <optgroup label="NVIDIA GeForce">
+              <option value="n_rtx_3060">RTX 3060</option>
+              <option value="n_rtx_3060ti">RTX 3060 Ti</option>
+              <option value="n_rtx_3060tix">RTX 3060 Ti (GDDR6X)</option>
+              <option value="n_rtx_3070">RTX 3070</option>
+              <option value="n_rtx_3080">RTX 3080</option>
+              <option value="n_rtx_3080ti">RTX 3080 Ti</option>
+              <option value="n_rtx_3090">RTX 3090</option>
+              <option value="n_rtx_4070">RTX 4070</option>
+              <option value="n_rtx_4070ti">RTX 4070 Ti</option>
+              <option value="n_rtx_4070tis">RTX 4070 Ti Super</option>
+              <option value="n_rtx_4080">RTX 4080</option>
+              <option value="n_rtx_4090">RTX 4090</option>
+              <option value="n_rtx_a2000">RTX A2000</option>
+              <option value="n_gtx_1660s">GTX 1660 Super</option>
+              <option value="n_gtx_1070">GTX 1070</option>
+              <option value="n_gtx_1070ti">GTX 1070 Ti</option>
+              <option value="n_gtx_1080ti">GTX 1080 Ti</option>
+            </optgroup>
+            <optgroup label="AMD Radeon">
+              <option value="a_rx_580">RX 580 8GB</option>
+              <option value="a_rx_590">RX 590</option>
+              <option value="a_rx_6600">RX 6600</option>
+              <option value="a_rx_6600xt">RX 6600 XT</option>
+              <option value="a_rx_6700xt">RX 6700 XT</option>
+              <option value="a_rx_6800">RX 6800</option>
+              <option value="a_rx_6800xt">RX 6800 XT</option>
+            </optgroup>
+          </select>
+        </div>
+        <div>
+          <label for="preset-h">Preset hashrate (MH/s)</label>
+          <input id="preset-h" type="number" step="0.01" disabled>
+        </div>
+        <div>
+          <label for="preset-p">Preset power (W)</label>
+          <input id="preset-p" type="number" step="1" disabled>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <button id="apply-preset">Apply to inputs</button>
+        <span class="pill" id="preset-origin">Source: static</span>
+      </div>
+
+      <hr>
+      <h3 style="margin:0 0 8px 0; font-size:1rem">Live fetch from hashrate.no</h3>
+      <div class="grid grid-3">
+        <div style="grid-column: span 2;">
+          <label for="live-query">GPU model or slug</label>
+          <input id="live-query" list="gpu-list" placeholder="e.g., RTX 3070  •  or slug: 3070, 3060ti, 4070tis, 6800xt, a2000, 1660s">
+          <datalist id="gpu-list">
+            <option value="RTX 3060 (slug: 3060)">
+            <option value="RTX 3060 Ti (slug: 3060ti)">
+            <option value="RTX 3060 Ti GDDR6X (slug: 3060tix)">
+            <option value="RTX 3070 (slug: 3070)">
+            <option value="RTX 3080 (slug: 3080)">
+            <option value="RTX 3080 Ti (slug: 3080ti)">
+            <option value="RTX 3090 (slug: 3090)">
+            <option value="RTX 4070 (slug: 4070)">
+            <option value="RTX 4070 Ti (slug: 4070ti)">
+            <option value="RTX 4070 Ti Super (slug: 4070tis)">
+            <option value="RTX 4080 (slug: 4080)">
+            <option value="RTX 4090 (slug: 4090)">
+            <option value="RTX A2000 (slug: a2000)">
+            <option value="GTX 1660 Super (slug: 1660s)">
+            <option value="GTX 1070 (slug: 1070)">
+            <option value="GTX 1070 Ti (slug: 1070ti)">
+            <option value="GTX 1080 Ti (slug: 1080ti)">
+            <option value="RX 580 8GB (slug: 580)">
+            <option value="RX 590 (slug: 590)">
+            <option value="RX 6600 (slug: 6600)">
+            <option value="RX 6600 XT (slug: 6600xt)">
+            <option value="RX 6700 XT (slug: 6700xt)">
+            <option value="RX 6800 (slug: 6800)">
+            <option value="RX 6800 XT (slug: 6800xt)">
+          </datalist>
+          <div class="hint">We’ll try to guess the slug automatically. You can also type the slug directly and click “Fetch”.</div>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button id="live-fetch">Fetch from hashrate.no</button>
+        </div>
+      </div>
+      <div id="live-status" class="hint" style="margin-top:6px"></div>
+
+      <hr>
+      <h3 style="margin:0 0 8px 0; font-size:1rem">Rig builder (multi‑GPU)</h3>
+      <div class="grid grid-3">
+        <div>
+          <label for="rig-label">Current selection</label>
+          <input id="rig-label" placeholder="e.g., RTX 3070 (live)">
+        </div>
+        <div>
+          <label for="rig-qty">Quantity</label>
+          <input id="rig-qty" type="number" min="1" step="1" value="1">
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button id="rig-add">Add GPU(s) to rig</button>
+        </div>
+      </div>
+
+      <div class="hint" style="margin-top:6px">
+        “Current selection” takes whatever is in the Preset (or Live fetch) fields above. Add multiple lines (e.g., 4× 3070 + 2× 1660S).
+      </div>
+
+      <div style="margin-top:12px; overflow:auto">
+        <table id="rig-table" hidden>
+          <thead>
+            <tr>
+              <th>GPU</th>
+              <th class="num">Qty</th>
+              <th class="num">MH/s (per)</th>
+              <th class="num">W (per)</th>
+              <th class="num">MH/s (total)</th>
+              <th class="num">W (total)</th>
+              <th class="actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot>
+            <tr>
+              <td colspan="4" class="num">Rig total →</td>
+              <td class="num" id="rig-sum-h">0.00</td>
+              <td class="num" id="rig-sum-p">0</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <button id="rig-apply" class="primary">Apply rig totals to Inputs</button>
+        <button id="rig-clear">Clear rig</button>
+      </div>
+
+    </section>
+
+    <!-- RESULTS -->
+    <section class="card out grid" id="results" hidden>
+      <div id="res-time"></div>
+      <div id="res-energy"></div>
+      <div id="res-cost"></div>
+      <hr>
+      <div id="res-watts"></div>
+      <div id="res-target"></div>
+    </section>
+
+    <!-- INFO -->
+    <section class="card small">
+      <strong>Notes</strong>
+      <ul>
+        <li>The default relation <em>100 MH/s·day = 1 QI</em> is a community rule of thumb. If protocol parameters or miner performance change, adjust the “Conversion factor”.</li>
+        <li>Effective yield depends on pool config, latency, stale/rejected shares, and mining in QI-preference mode.</li>
+        <li>Live fetch uses a CORS-friendly reader. If it ever fails, you can still rely on the static presets or type values manually.</li>
+      </ul>
+      <div>Docs: <a href="https://docs.qu.ai/" target="_blank" rel="noopener">docs.qu.ai</a> • Site: <a href="https://www.quai.org/" target="_blank" rel="noopener">quai.org</a></div>
+    </section>
+  </main>
+
+  <footer>
+    Built for the Quai community
+  </footer>
+
+  <script>
+    /* ----------------- STATIC PRESETS (baseline, from hashrate.no QUAI pages; adjust as needed) ----------------- */
+    const CURRENCY_SYMBOLS = { USD: '$', EUR: '€', ARS: '$', CLP: '$', BRL: 'R$', MXN: '$', GBP: '£' };
+
+    const PRESETS = {
+      // NVIDIA
+      n_rtx_3060:   { label: 'RTX 3060', h: 23.26, p: 132 },
+      n_rtx_3060ti: { label: 'RTX 3060 Ti', h: 29.62, p: 168 },
+      n_rtx_3060tix:{ label: 'RTX 3060 Ti (GDDR6X)', h: 29.77, p: 194 },
+      n_rtx_3070:   { label: 'RTX 3070', h: 29.67, p: 149 },
+      n_rtx_3080:   { label: 'RTX 3080', h: 49.00, p: 300 },
+      n_rtx_3080ti: { label: 'RTX 3080 Ti', h: 55.60, p: 334 },
+      n_rtx_3090:   { label: 'RTX 3090', h: 56.71, p: 344 },
+      n_rtx_4070:   { label: 'RTX 4070', h: 32.50, p: 168 },
+      n_rtx_4070ti: { label: 'RTX 4070 Ti', h: 33.35, p: 150 },
+      n_rtx_4070tis:{ label: 'RTX 4070 Ti Super', h: 42.39, p: 218 },
+      n_rtx_4080:   { label: 'RTX 4080', h: 46.87, p: 230 },
+      n_rtx_4090:   { label: 'RTX 4090', h: 64.57, p: 299 },
+      n_rtx_a2000:  { label: 'RTX A2000', h: 14.27, p:  69 },
+      n_gtx_1660s:  { label: 'GTX 1660 Super', h: 10.63, p:  78 },
+      n_gtx_1070:   { label: 'GTX 1070', h: 14.17, p: 150 },
+      n_gtx_1070ti: { label: 'GTX 1070 Ti', h: 14.28, p: 149 },
+      n_gtx_1080ti: { label: 'GTX 1080 Ti', h: 22.42, p: 170 },
+
+      // AMD
+      a_rx_580:     { label: 'RX 580 8GB', h: 11.77, p: 125 },
+      a_rx_590:     { label: 'RX 590', h: 11.24, p: 114 },
+      a_rx_6600:    { label: 'RX 6600', h: 10.79, p:  55 },
+      a_rx_6600xt:  { label: 'RX 6600 XT', h: 12.23, p:  62 },
+      a_rx_6700xt:  { label: 'RX 6700 XT', h: 14.98, p:  88 },
+      a_rx_6800:    { label: 'RX 6800', h: 23.28, p: 135 },
+      a_rx_6800xt:  { label: 'RX 6800 XT', h: 27.73, p: 127 },
+    };
+
+    // Quick map to guess slugs from common model text
+    const NAME_TO_SLUG = {
+      'rtx 3060 ti gddr6x':'3060tix',
+      'rtx 3060 ti':'3060ti',
+      '3060 ti':'3060ti',
+      'rtx 3060':'3060',
+      '3060':'3060',
+      'rtx 3070':'3070',
+      '3070':'3070',
+      'rtx 3080':'3080',
+      '3080':'3080',
+      'rtx 3080 ti':'3080ti',
+      '3080 ti':'3080ti',
+      'rtx 3090':'3090',
+      '3090':'3090',
+      'rtx 4070 ti super':'4070tis',
+      '4070 ti super':'4070tis',
+      'rtx 4070 ti':'4070ti',
+      '4070 ti':'4070ti',
+      'rtx 4070':'4070',
+      '4070':'4070',
+      'rtx 4080':'4080',
+      '4080':'4080',
+      'rtx 4090':'4090',
+      '4090':'4090',
+      'rtx a2000':'a2000',
+      'a2000':'a2000',
+      'gtx 1660 super':'1660s',
+      '1660 super':'1660s',
+      'gtx 1070':'1070',
+      '1070':'1070',
+      'gtx 1070 ti':'1070ti',
+      '1070 ti':'1070ti',
+      'gtx 1080 ti':'1080ti',
+      '1080 ti':'1080ti',
+      'rx 580':'580',
+      'rx580':'580',
+      '580':'580',
+      'rx 590':'590',
+      '590':'590',
+      'rx 6600 xt':'6600xt',
+      '6600 xt':'6600xt',
+      'rx 6600':'6600',
+      '6600':'6600',
+      'rx 6700 xt':'6700xt',
+      '6700 xt':'6700xt',
+      'rx 6800 xt':'6800xt',
+      '6800 xt':'6800xt',
+      'rx 6800':'6800',
+      '6800':'6800',
+    };
+
+    // --- Helpers ---
+    const $ = id => document.getElementById(id);
+    const clampPos = x => (isFinite(x) && x > 0) ? x : NaN;
+    const fmt = (n, dec=2) => Number(n).toLocaleString(undefined, { maximumFractionDigits: dec, minimumFractionDigits: dec });
+
+    function loadSaved(){
+      try {
+        const s = JSON.parse(localStorage.getItem('qiCalc') || '{}');
+        if(s.theme) document.documentElement.setAttribute('data-theme', s.theme), $('theme').value = s.theme;
+        if(s.currency){ $('currency').value = s.currency; $('cur-symbol').textContent = CURRENCY_SYMBOLS[s.currency] || '$'; }
+        if(s.hashrate) $('hashrate').value = s.hashrate;
+        if(s.power) $('power').value = s.power;
+        if(typeof s.price === 'number') $('price').value = s.price;
+        if(s.conv) $('conv').value = s.conv;
+        if(s.target) $('target').value = s.target;
+        if(s.rig) { rig = s.rig; renderRig(); }
+      } catch(e){}
+    }
+
+    function save(){
+      const data = {
+        theme: document.documentElement.getAttribute('data-theme') || 'dark',
+        currency: $('currency').value,
+        hashrate: parseFloat($('hashrate').value),
+        power: parseFloat($('power').value),
+        price: parseFloat($('price').value),
+        conv: parseFloat($('conv').value),
+        target: parseFloat($('target').value) || '',
+        rig
+      };
+      localStorage.setItem('qiCalc', JSON.stringify(data));
+    }
+
+    function compute(){
+      const H = clampPos(parseFloat($('hashrate').value)); // MH/s
+      const P = clampPos(parseFloat($('power').value));    // W
+      const C = clampPos(parseFloat($('conv').value));     // MH/s·day per QI
+      const price = parseFloat($('price').value);          // currency/kWh (>=0)
+      if(!H || !P || !C){
+        alert('Please enter positive values for hashrate, power and conversion factor.');
+        return;
+      }
+
+      // Time for 1 QI
+      const daysPerQI = C / H;
+      const hoursPerQI = 24 * daysPerQI;
+
+      // Energy per QI (kWh): (P/1000) * 24 * (C/H) = (0.024 * C * P) / H
+      const kWhPerQI = (0.024 * C * P) / H;
+
+      // Cost per QI
+      const cost = (isFinite(price) && price >= 0) ? kWhPerQI * price : null;
+
+      // Watts to hit 1 QI/day with current efficiency: e = H/P => P_req = C / e = C * P / H
+      const P_req = (C * P) / H;
+
+      // Optional target (QI/day)
+      const tgt = clampPos(parseFloat($('target').value));
+      let targetTxt = '';
+      if(tgt){
+        const H_req = tgt * C;                   // MH/s
+        const wattsForTarget = H_req * (P / H);  // W, assuming same efficiency
+        targetTxt = `🎯 For a target of <strong>${fmt(tgt,4)} QI/day</strong>: required hashrate ≈ <strong>${fmt(H_req,2)} MH/s</strong> and estimated power ≈ <strong>${fmt(wattsForTarget,0)} W</strong> at current efficiency.`;
+      }
+
+      $('res-time').innerHTML   = `⏱️ Estimated time for <strong>1 QI</strong>: <strong>${fmt(daysPerQI,3)} days</strong> (${fmt(hoursPerQI,1)} h) at ${fmt(H,2)} MH/s.`;
+      $('res-energy').innerHTML = `⚡ Energy per <strong>1 QI</strong>: <strong>${fmt(kWhPerQI,3)} kWh</strong> at ${fmt(P,0)} W.`;
+      $('res-cost').innerHTML   = (cost !== null)
+        ? `💸 Electricity cost per <strong>1 QI</strong>: <strong><span id="cur-sym2">${CURRENCY_SYMBOLS[$('currency').value] || '$'}</span>${fmt(cost,3)}</strong> (at ${fmt(price,4)} per kWh).`
+        : `💸 Electricity cost per <strong>1 QI</strong>: <em>enter your kWh price</em>.`;
+      $('res-watts').innerHTML  = `🔌 Power needed to reach <strong>1 QI/day</strong> at your current efficiency: <strong>${fmt(P_req,1)} W</strong>.`;
+      $('res-target').innerHTML = targetTxt;
+      $('results').hidden = false;
+      save();
+    }
+
+    // --- Events for Inputs ---
+    $('calc').addEventListener('click', compute);
+    $('reset').addEventListener('click', () => {
+      $('hashrate').value = 60; $('power').value = 120; $('price').value = 0.15; $('currency').value = 'USD';
+      $('conv').value = 100; $('target').value = ''; $('cur-symbol').textContent = CURRENCY_SYMBOLS['USD'];
+      $('results').hidden = true;
+      save();
+    });
+    $('save').addEventListener('click', () => { save(); alert('Defaults saved to this browser.'); });
+
+    $('currency').addEventListener('change', e => {
+      $('cur-symbol').textContent = CURRENCY_SYMBOLS[e.target.value] || '$';
+      const sym2 = document.getElementById('cur-sym2'); if(sym2) sym2.textContent = CURRENCY_SYMBOLS[e.target.value] || '$';
+      save();
+    });
+    $('theme').addEventListener('change', e => {
+      document.documentElement.setAttribute('data-theme', e.target.value);
+      save();
+    });
+
+    // --------- Presets (static) ---------
+    function setPresetFields(key){
+      const p = PRESETS[key];
+      $('preset-h').value = p ? p.h : '';
+      $('preset-p').value = p ? p.p : '';
+      $('rig-label').value = p ? p.label : '';
+      $('preset-origin').textContent = 'Source: ' + (p ? 'static' : '—');
+    }
+    $('preset').addEventListener('change', e => setPresetFields(e.target.value));
+    $('apply-preset').addEventListener('click', () => {
+      const key = $('preset').value;
+      const p = PRESETS[key];
+      if(!p) return;
+      $('hashrate').value = p.h; $('power').value = p.p;
+      compute(); save();
+    });
+
+    // --------- Live fetch from hashrate.no (using CORS-friendly reader) ---------
+    function guessSlug(q){
+      if(!q) return '';
+      let s = q.toLowerCase().trim();
+      // if user typed "(slug: X)"
+      const m = s.match(/slug:\s*([a-z0-9]+)\)?$/);
+      if(m) return m[1];
+      // strip vendor tokens
+      s = s.replace(/\b(nvidia|geforce|amd|radeon|rtx|gtx|rx)\b/g,' ').replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
+      // special tokens
+      s = s.replace(/\bti super\b/,'tis').replace(/\bti\b/,'ti').replace(/\bxt\b/,'xt').replace(/\bsuper\b/,'s');
+      // try direct map
+      if(NAME_TO_SLUG[s]) return NAME_TO_SLUG[s];
+      // heuristic: keep digits+letters, remove spaces
+      const condensed = s.replace(/\s+/g,'');
+      return NAME_TO_SLUG[condensed] || condensed;
+    }
+
+    async function fetchHashrateNo(slug){
+      const status = $('live-status');
+      status.textContent = 'Fetching…';
+      const candidates = [
+        `https://r.jina.ai/http://hashrate.no/gpus/${slug}/QUAI`,
+        `https://r.jina.ai/http://www.hashrate.no/gpus/${slug}/QUAI`,
+        `https://r.jina.ai/https://hashrate.no/gpus/${slug}/QUAI`,
+      ];
+      let lastErr = null, text = '';
+      for(const url of candidates){
+        try{
+          const res = await fetch(url);
+          if(!res.ok) { lastErr = new Error('HTTP '+res.status); continue; }
+          text = await res.text();
+          if(text && text.length > 200) break;
+        }catch(e){ lastErr = e; }
+      }
+      if(!text){
+        status.textContent = 'Could not fetch (CORS or not found). Try a different slug or use static presets.';
+        throw lastErr || new Error('Fetch failed');
+      }
+      // Very tolerant parsing: look for first MH/s number and first W number on the page.
+      // Prefer numbers near "MH/s" and "W".
+      const mhMatches = [...text.matchAll(/(\d+(?:\.\d+)?)\s*MH\/s/gi)];
+      const wMatches  = [...text.matchAll(/(\d+(?:\.\d+)?)\s*W\b/gi)];
+      // fallback: sometimes they write "MH/s" without slash? be safe:
+      const mhMatches2 = mhMatches.length ? mhMatches : [...text.matchAll(/(\d+(?:\.\d+)?)\s*MH\s*\/?\s*s/gi)];
+      const h = mhMatches2.length ? parseFloat(mhMatches2[0][1]) : NaN;
+      const p = wMatches.length ? parseFloat(wMatches[0][1]) : NaN;
+
+      if(!isFinite(h) || !isFinite(p)){
+        status.textContent = 'Fetched page but could not parse numbers. Enter values manually.';
+        throw new Error('Parse error');
+      }
+      status.textContent = `Fetched ${h} MH/s, ${p} W from hashrate.no (slug: ${slug})`;
+      return {h, p};
+    }
+
+    $('live-fetch').addEventListener('click', async () => {
+      const q = $('live-query').value;
+      const slug = guessSlug(q);
+      if(!slug){ $('live-status').textContent = 'Type a model or slug first.'; return; }
+      try{
+        const {h,p} = await fetchHashrateNo(slug);
+        $('preset-h').value = h.toFixed(2);
+        $('preset-p').value = Math.round(p);
+        $('rig-label').value = (q || slug) + ' (live)';
+        $('preset-origin').textContent = 'Source: hashrate.no (live)';
+      }catch(e){
+        console.error(e);
+      }
+    });
+
+    // --------- Rig builder ---------
+    let rig = []; // {label, h, p, qty}
+
+    function renderRig(){
+      const table = $('rig-table');
+      const tbody = table.querySelector('tbody');
+      tbody.innerHTML = '';
+      let sumH = 0, sumP = 0;
+      rig.forEach((it, idx) => {
+        const row = document.createElement('tr');
+        const th = (v, cls='') => { const td=document.createElement('td'); td.textContent=v; if(cls) td.className=cls; return td; };
+        const tdGPU = th(it.label);
+        const tdQty = th(it.qty, 'num');
+        const tdH   = th(it.h.toFixed(2), 'num');
+        const tdP   = th(Math.round(it.p), 'num');
+        const tdHt  = th((it.h*it.qty).toFixed(2), 'num');
+        const tdPt  = th(Math.round(it.p*it.qty), 'num');
+        const tdAct = document.createElement('td'); tdAct.className='actions';
+        const btnMinus = document.createElement('button'); btnMinus.textContent='–'; btnMinus.onclick = () => { it.qty = Math.max(1, it.qty-1); renderRig(); };
+        const btnPlus  = document.createElement('button'); btnPlus.textContent='+'; btnPlus.onclick  = () => { it.qty += 1; renderRig(); };
+        const btnDel   = document.createElement('button'); btnDel.textContent='Remove'; btnDel.onclick = () => { rig.splice(idx,1); renderRig(); };
+        tdAct.append(btnMinus, btnPlus, btnDel);
+        row.append(tdGPU, tdQty, tdH, tdP, tdHt, tdPt, tdAct);
+        tbody.appendChild(row);
+        sumH += it.h * it.qty;
+        sumP += it.p * it.qty;
+      });
+      $('rig-sum-h').textContent = sumH.toFixed(2);
+      $('rig-sum-p').textContent = Math.round(sumP);
+      table.hidden = rig.length === 0;
+      save();
+    }
+
+    $('rig-add').addEventListener('click', () => {
+      const label = ($('rig-label').value || $('preset').selectedOptions[0]?.textContent || 'Custom').trim();
+      const h = parseFloat($('preset-h').value);
+      const p = parseFloat($('preset-p').value);
+      const qty = Math.max(1, parseInt($('rig-qty').value || '1', 10));
+      if(!isFinite(h) || !isFinite(p)){ alert('Preset hashrate/power are empty. Use a static preset or live fetch first.'); return; }
+      rig.push({label, h, p, qty});
+      renderRig();
+    });
+
+    $('rig-apply').addEventListener('click', () => {
+      const H = parseFloat($('rig-sum-h').textContent) || 0;
+      const P = parseFloat($('rig-sum-p').textContent) || 0;
+      if(H <= 0 || P <= 0){ alert('Add GPUs to the rig first.'); return; }
+      $('hashrate').value = H;
+      $('power').value = P;
+      compute();
+    });
+
+    $('rig-clear').addEventListener('click', () => { rig = []; renderRig(); });
+
+    // Init
+    (function init(){
+      loadSaved();
+      setPresetFields('custom');
+      compute(); // autorun once
+    })();
+  </script>
+</body>
+</html>
